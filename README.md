@@ -1,3 +1,16 @@
+### MultiMove - Wurm Unlimited Server Mod
+
+### with optional MultiMoveShift Client Mod
+
+---
+
+Move single items or highlighted selections between containers and inventory without quantity prompts, respecting available space and carry limits. Works for all players through the server, with an optional client companion for choosing specific quantities using Shift-drag.
+
+---
+
+<br>
+<br>
+
 # MultiMove 1.0.5
 
 Move highlighted inventory rows with one drag using the standard Wurm Unlimited
