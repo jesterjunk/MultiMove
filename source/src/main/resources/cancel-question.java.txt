@@ -1,0 +1,6 @@
+public void multiMove$cancelQuestion(com.wurmonline.server.questions.Question question) {
+    if (question == this.multiMove$question) {
+        this.multiMove$trace("selection cancelled with its quantity dialog");
+        this.multiMove$clear();
+    }
+}

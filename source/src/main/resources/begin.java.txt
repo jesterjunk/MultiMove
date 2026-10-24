@@ -1,0 +1,85 @@
+private boolean multiMove$begin(java.nio.ByteBuffer packet, int quantity) {
+    if (this.multiMove$inside) return false;
+    // Any later drag supersedes a pending selection, even a single-item drag.
+    if (this.multiMove$question != null) {
+        com.wurmonline.server.questions.Questions.removeQuestion(this.multiMove$question);
+    }
+    this.multiMove$clear();
+    long[] planned;
+    long target;
+    java.nio.ByteBuffer view = packet.duplicate();
+    try {
+        if (view.remaining() < 2) return false;
+        int count = view.getShort() & 65535;
+        // Preserve Wurm's native per-request limit and special trade/bank flows.
+        if (count < 1 || count > 100 || view.remaining() < count * 8 + 8) return false;
+        java.util.LinkedHashSet selected = new java.util.LinkedHashSet();
+        for (int i = 0; i < count; i++) selected.add(java.lang.Long.valueOf(view.getLong()));
+        target = view.getLong();
+        // Match the native handler's player-inventory and virtual-group aliases.
+        if (target == -1L) target = this.player.getInventory().getWurmId();
+        if (target < 5L) return false;
+        com.wurmonline.server.items.Item destination = com.wurmonline.server.Items.getItem(target);
+        if (destination.getTemplateId() == 1392) {
+            target = destination.getParentId();
+            destination = com.wurmonline.server.Items.getItem(target);
+        }
+        int targetType = com.wurmonline.server.WurmId.getType(target);
+        if (target < 5L || (targetType != 2 && targetType != 6 && targetType != 19 && targetType != 20)) return false;
+        java.util.HashSet visited = new java.util.HashSet();
+        // A drop onto an ordinary item uses its nearest container, as in Wurm.
+        while (!destination.isHollow() && !destination.isBulkContainer()) {
+            if (!visited.add(java.lang.Long.valueOf(destination.getWurmId()))) return false;
+            destination = destination.getParentOrNull();
+            if (destination == null) return false;
+        }
+        target = destination.getWurmId();
+        targetType = com.wurmonline.server.WurmId.getType(target);
+        if (target < 5L || (targetType != 2 && targetType != 6 && targetType != 19 && targetType != 20)) return false;
+        // Reject self/descendant destinations before making any native call.
+        visited.clear();
+        com.wurmonline.server.items.Item ancestor = destination;
+        while (ancestor != null) {
+            java.lang.Long key = java.lang.Long.valueOf(ancestor.getWurmId());
+            if (selected.contains(key) || !visited.add(key)) {
+                this.sendNormalServerMessage("You cannot move a selection into itself.");
+                packet.position(view.position());
+                return true;
+            }
+            ancestor = ancestor.getParentOrNull();
+        }
+        java.util.ArrayList ids = new java.util.ArrayList();
+        java.util.Iterator it = selected.iterator();
+        while (it.hasNext()) {
+            java.lang.Long id = (java.lang.Long)it.next();
+            com.wurmonline.server.items.Item item;
+            try { item = com.wurmonline.server.Items.getItem(id.longValue()); }
+            catch (com.wurmonline.server.NoSuchItemException missing) { continue; }
+            if (item.getParentId() == target) continue;
+            boolean covered = false;
+            visited.clear();
+            ancestor = item.getParentOrNull();
+            while (ancestor != null) {
+                java.lang.Long key = java.lang.Long.valueOf(ancestor.getWurmId());
+                if (!visited.add(key)) return false;
+                if (selected.contains(key)) { covered = true; break; }
+                ancestor = ancestor.getParentOrNull();
+            }
+            if (!covered) ids.add(id);
+        }
+        planned = new long[ids.size()];
+        for (int i = 0; i < planned.length; i++) planned[i] = ((java.lang.Long)ids.get(i)).longValue();
+    } catch (java.lang.Exception e) {
+        // Nothing has moved and the original packet position is intact.
+        this.multiMove$trace("preparation unavailable; native request retained: " + e.toString());
+        return false;
+    }
+    packet.position(view.position());
+    this.multiMove$target = target;
+    this.multiMove$ids = planned;
+    this.multiMove$quantity = quantity;
+    this.multiMove$next = 0;
+    this.multiMove$trace("received selection; planned=" + planned.length + " target=" + target);
+    this.multiMove$drain();
+    return true;
+}

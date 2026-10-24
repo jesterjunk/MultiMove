@@ -1,0 +1,8 @@
+private void multiMove$clear() {
+    this.multiMove$ids = null;
+    this.multiMove$question = null;
+    this.multiMove$next = 0;
+    this.multiMove$target = 0L;
+    this.multiMove$quantity = 0;
+    this.multiMove$waitingForAction = false;
+}

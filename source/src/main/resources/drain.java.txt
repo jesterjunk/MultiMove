@@ -1,0 +1,35 @@
+private void multiMove$drain() {
+    while (this.multiMove$ids != null
+            && this.multiMove$next < this.multiMove$ids.length
+            && this.multiMove$question == null
+            && !this.multiMove$waitingForAction) {
+        if (!this.player.hasLink() || this.player.isDead() || this.player.isUndead()) {
+            this.multiMove$clear();
+            return;
+        }
+        long id = this.multiMove$ids[this.multiMove$next++];
+        java.nio.ByteBuffer one = java.nio.ByteBuffer.allocate(18);
+        one.putShort((short)1);
+        one.putLong(id);
+        one.putLong(this.multiMove$target);
+        one.flip();
+        this.multiMove$trace("native move item=" + id + " target=" + this.multiMove$target);
+        this.multiMove$inside = true;
+        try {
+            this.reallyHandle_CMD_MOVE_INVENTORY(one);
+        } catch (java.lang.Exception e) {
+            // A partial native operation must never be retried.
+            this.multiMove$clear();
+            java.util.logging.Logger.getLogger("MultiMove").log(java.util.logging.Level.WARNING,
+                    "Stopped selected transfer after native move error; not retrying.", e);
+            return;
+        } finally {
+            this.multiMove$inside = false;
+        }
+    }
+    if (this.multiMove$ids != null && this.multiMove$question == null
+            && !this.multiMove$waitingForAction) {
+        this.multiMove$trace("selection finished; each planned ID was attempted once");
+        this.multiMove$clear();
+    }
+}

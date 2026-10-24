@@ -1,0 +1,7 @@
+public void multiMove$waiting(com.wurmonline.server.questions.Question question) {
+    if (this.multiMove$inside && this.multiMove$ids != null) {
+        this.multiMove$question = question;
+        this.multiMove$trace("waiting for native bulk quantity; remaining="
+                + (this.multiMove$ids.length - this.multiMove$next));
+    }
+}

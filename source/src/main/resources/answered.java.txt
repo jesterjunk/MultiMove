@@ -1,0 +1,22 @@
+public void multiMove$answered(com.wurmonline.server.questions.Question question,
+        java.util.Properties answers) {
+    if (question != this.multiMove$question) return;
+    String count = answers == null ? null : answers.getProperty("numstext");
+    if (count == null || count.length() == 0) count = answers == null ? null : answers.getProperty("items");
+    boolean proceed = false;
+    try { proceed = count != null && java.lang.Integer.parseInt(count) > 0; }
+    catch (java.lang.NumberFormatException ignored) { }
+    if (!proceed || !this.player.hasLink() || this.player.isDead() || this.player.isUndead()) {
+        this.multiMove$clear();
+        return;
+    }
+    this.multiMove$question = null;
+    if (this.player.getActions().getLastSlowAction() != null) {
+        this.multiMove$waitingForAction = true;
+        return;
+    }
+    // Automatic answers run inside the current native move. Its outer loop
+    // advances the selection after it returns, avoiding recursive transfers.
+    if (this.multiMove$inside || this.multiMove$automaticAnswer) return;
+    this.multiMove$drain();
+}

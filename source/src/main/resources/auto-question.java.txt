@@ -1,0 +1,12 @@
+public boolean multiMove$autoQuestion(com.wurmonline.server.questions.RemoveItemQuestion question) {
+    if (!this.multiMove$inside || this.multiMove$ids == null) return false;
+    if (!this.multiMove$shouldAutoQuantity()) return false;
+    this.multiMove$question = question;
+    if (this.player.getActions().getLastSlowAction() != null) {
+        this.multiMove$waitingForAction = true;
+        this.multiMove$trace("waiting for native action before quantity answer");
+    } else {
+        this.multiMove$autoAnswer();
+    }
+    return true;
+}

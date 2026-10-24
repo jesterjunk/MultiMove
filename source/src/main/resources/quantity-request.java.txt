@@ -1,0 +1,24 @@
+public void multiMove$quantityRequest(java.nio.ByteBuffer message) {
+    if (!this.player.hasLink() || this.player.isDead() || this.player.isUndead()) return;
+    java.nio.ByteBuffer view = message.duplicate();
+    if (view.remaining() < 23 || view.remaining() > 815) {
+        this.sendNormalServerMessage("MultiMove: invalid quantity request; nothing moved.");
+        return;
+    }
+    int version = view.get() & 255;
+    int quantity = view.getInt();
+    int count = view.getShort() & 65535;
+    if (version != 1 || quantity <= 0 || count < 1 || count > 100 || view.remaining() != count * 8 + 8) {
+        this.sendNormalServerMessage("MultiMove: invalid quantity request; nothing moved.");
+        return;
+    }
+    java.nio.ByteBuffer nativePacket = java.nio.ByteBuffer.allocate(10 + count * 8);
+    nativePacket.putShort((short)count);
+    for (int i = 0; i < count; i++) nativePacket.putLong(view.getLong());
+    nativePacket.putLong(view.getLong());
+    nativePacket.flip();
+    if (!this.multiMove$begin(nativePacket, quantity)) {
+        // Never fall back to an unbounded native move after an explicit amount.
+        this.sendNormalServerMessage("MultiMove: that quantity destination is unsupported; nothing moved.");
+    }
+}

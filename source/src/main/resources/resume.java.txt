@@ -1,0 +1,18 @@
+public void multiMove$resume() {
+    if (this.multiMove$ids == null || !this.multiMove$waitingForAction
+            || this.multiMove$inside || this.multiMove$automaticAnswer) return;
+    if (!this.player.hasLink() || this.player.isDead() || this.player.isUndead()) {
+        this.multiMove$clear();
+        return;
+    }
+    if (this.player.getActions().getLastSlowAction() != null) return;
+    this.multiMove$waitingForAction = false;
+    try {
+        if (this.multiMove$question != null) this.multiMove$autoAnswer();
+        if (!this.multiMove$waitingForAction) this.multiMove$drain();
+    } catch (java.lang.Exception e) {
+        this.multiMove$clear();
+        java.util.logging.Logger.getLogger("MultiMove").log(java.util.logging.Level.WARNING,
+                "Stopped selected transfer after native quantity error; not retrying.", e);
+    }
+}

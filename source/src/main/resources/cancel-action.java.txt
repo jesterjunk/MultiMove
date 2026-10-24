@@ -1,0 +1,9 @@
+public void multiMove$cancelAction() {
+    if (this.multiMove$waitingForAction) {
+        if (this.multiMove$question != null) {
+            com.wurmonline.server.questions.Questions.removeQuestion(this.multiMove$question);
+        }
+        this.multiMove$trace("remaining selection cancelled with native action");
+        this.multiMove$clear();
+    }
+}

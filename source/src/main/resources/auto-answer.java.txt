@@ -1,0 +1,20 @@
+private void multiMove$autoAnswer() {
+    com.wurmonline.server.questions.Question question = this.multiMove$question;
+    if (question == null || this.multiMove$ids == null) return;
+    java.util.Properties values = new java.util.Properties();
+    int quantity = this.multiMove$quantity > 0 ? this.multiMove$quantity : java.lang.Integer.MAX_VALUE;
+    values.setProperty("items", java.lang.Integer.toString(quantity));
+    this.multiMove$automaticAnswer = true;
+    try {
+        if (this.multiMove$quantity > 0) this.multiMove$trace("using requested quantity=" + quantity);
+        else this.multiMove$trace("using native maximum quantity");
+        question.answer(values);
+        if (this.multiMove$ids != null && this.player.getActions().getLastSlowAction() != null) {
+            this.multiMove$waitingForAction = true;
+        }
+    } finally {
+        this.multiMove$automaticAnswer = false;
+        if (this.multiMove$question == question) this.multiMove$question = null;
+        com.wurmonline.server.questions.Questions.removeQuestion(question);
+    }
+}
