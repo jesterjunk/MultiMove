@@ -2,6 +2,8 @@ These mods were developed with the aid of ChatGPT-6.1 Sol Max
 
 https://chatgpt.com/share/6adc033f-e7a4-83ea-b9c2-cece90d7d488
 
+<br><br>
+
 ---
 
 ### MultiMove - Wurm Unlimited Server Mod
