@@ -1,36 +1,20 @@
-These mods were developed with the aid of ChatGPT-6.1 Sol Max
-
-https://chatgpt.com/share/6adc033f-e7a4-83ea-b9c2-cece90d7d488
-
-<br><br>
-
----
-
-### MultiMove - Wurm Unlimited Server Mod
-
-### with optional MultiMoveShift Client Mod
-
----
-
-Move single items or highlighted selections between containers and inventory without quantity prompts, respecting available space and carry limits. Works for all players through the server, with an optional client companion for choosing specific quantities using Shift-drag.
-
----
-
-<br>
-<br>
-
-# MultiMove 1.0.5
+# MultiMove 1.0.6
 
 Move highlighted inventory rows with one drag using the standard Wurm Unlimited
 client. Install the root `mods` folder on the server. Normal single and multiple
 drags work for players without a client mod.
 
 **Exact amounts entered in the Shift-drag popup require the included optional
-client companion.** Version 1.0.5 adds this support. The stock client's Shift
+client companion.** Version 1.0.5 introduced this support. The stock client's Shift
 popup limits how many ordinary item IDs it sends per selected row, but a stored
 bulk row is represented by one ID regardless of the amount entered. Its move
 packet contains neither that bulk amount nor a Shift flag. The server alone
 cannot distinguish those requests from a normal drag.
+
+Version 1.0.6 makes the companion stay dormant unless the current server confirms
+the matching feature. On other servers it calls Wurm's original Shift handler,
+with its normal behavior and dialogs. A previous server's confirmation cannot
+enable the companion after switching connections.
 
 Automatic quantities apply to normal single-row drags and multi-selection. Bulk
 withdrawals use Wurm's current free inventory slots and carry limits, leaving
@@ -75,12 +59,19 @@ This is the server-only way to choose bulk amounts: use Wurm's server quantity
 dialog. It also restores those dialogs for ordinary bulk drags. The amount
 entered in a stock client's first Shift popup still is not transmitted for bulk.
 
-With the companion installed, the existing Shift popup sends the entered
+With the companion active on a supporting server, the existing Shift popup sends the entered
 positive amount through a negotiated ModComm channel. The server supplies that
 amount to each selected bulk row's native answer instead of the maximum.
 Ordinary grouped rows retain the client's per-row ID limit. Native availability,
 weight, inventory slots, permissions, and destination checks still apply.
 No second server quantity dialog is shown, including with `autoQuantities=false`.
+
+## Upgrade the client from 1.0.5
+
+Close the client and replace `WurmLauncher/mods/multimoveshift/multimoveshift.jar`
+with the JAR from `optional-client/mods/multimoveshift/`, then restart the client.
+An existing MultiMove 1.0.5 server remains compatible and needs no update for
+this fix. The server transfer behavior and quantity protocol are unchanged.
 
 ## Upgrade from MultiMove 1.0.2, 1.0.3, or 1.0.4
 
@@ -121,16 +112,18 @@ Players who only need normal automatic transfers can keep using the stock client
 The server startup log should include:
 
 ```text
-[MultiMove 1.0.5] native selection hooks installed; autoQuantities=true
-[MultiMove 1.0.5] optional Shift quantity channel ready
+[MultiMove 1.0.6] native selection hooks installed; autoQuantities=true
+[MultiMove 1.0.6] optional Shift quantity channel ready
 ```
 
 No replacement game JAR, database changes, or launcher update is included.
 
 ## Optional client companion for exact Shift amounts
 
-Install this only for players who want the Shift popup's bulk amount honored.
-The server must run MultiMove 1.0.5 or later with the feature enabled.
+Install this for players who want the Shift popup's bulk amount honored.
+The feature activates on servers running MultiMove 1.0.5 or later with the
+matching channel enabled. The companion can remain installed when visiting
+other servers: it uses the original game behavior there.
 
 | Package folder | Copy into | Purpose |
 | --- | --- | --- |
@@ -148,18 +141,23 @@ is still installed; keep other client mods.
 On a supporting server the client log includes:
 
 ```text
-[MultiMoveShift 1.0.5] server supports explicit Shift quantities
+[MultiMoveShift 1.0.6] server supports explicit Shift quantities
 ```
 
 Hold Shift while dropping into an inventory or container window, enter an amount,
 and submit. The value applies per selected row, matching the stock popup's
 ordinary-stack behavior. For example, with 20 stored items, entering 3 asks Wurm
 to transfer 3 rather than its automatic maximum. Normal drags still transfer
-automatically. Zero or negative amounts move nothing.
+automatically. With the companion active, zero or negative amounts move nothing.
 
-The companion cancels an explicit transfer if the server channel is unavailable
-or more than 100 IDs are selected. It displays a local message rather than
-falling back to an automatic maximum. It does not retry a failed submission.
+Until the current server confirms support, the companion passes Shift submissions
+unchanged to Wurm's original method, without its own warnings, quantity messages,
+or input restrictions. It binds confirmation to the current network connection,
+so stale channel flags from another server do not activate it.
+
+On a supporting server, selections of more than 100 IDs are cancelled with a
+local message. A failed custom submission is never retried or followed by a
+stock submission that could instead transfer the maximum.
 World-model drops keep their existing client behavior; the stock Shift popup
 being enhanced here belongs to inventory/container windows.
 
@@ -224,6 +222,11 @@ rows, a timed bulk-to-bulk action, a nearly full inventory, and then a normal
 drag. The normal drag should use the maximum again. With three free slots and
 an entered amount of 2, at most two should be withdrawn.
 
+Also join a server without MultiMove: Shift-drag should use that server's normal
+game behavior, with no companion warning. Repeat after switching from a server
+that supports MultiMove, then reconnect to the supporting server and check that
+exact amounts work again.
+
 Debug logging is enabled for this test build. The server log records
 `received selection; planned=N`, one `native move item=...` for each attempted
 ID, and `using native maximum quantity` for automatic bulk answers. These
@@ -260,9 +263,13 @@ with it disabled. They cover actual ModComm listener registration, entered
 amounts, inventory aliases, live slots, mixed rows, sequential native actions,
 cancellation, normal drags after explicit amounts, invalid messages, player
 isolation, and a packet produced by the client companion's real hook.
-134 client checks cover the real mod loader hook, bulk quantities, native
-ordinary-stack ID clipping, normal drags, invalid amounts, an unavailable server,
-bounded selections, send failures without retries, and rollback of a failed hook.
+159 client checks cover the real mod loader hook, bulk quantities, native
+ordinary-stack ID clipping, normal drags, invalid amounts, native passthrough on
+unsupported servers, bounded selections, send failures without retries, and
+rollback of a failed hook. They also exercise the real SDK handshake, connection
+changes, stale channel flags, unavailable connection identity, and fresh
+confirmation after reconnecting. Native passthrough retains the original target,
+amount, selection handling, and exceptions without a second submission.
 The client hook also compiles against the uploaded `client-patched.jar`, and
 the patched native client class loads with JVM bytecode verification enabled.
 
@@ -270,7 +277,8 @@ These checks do not launch a game world or establish compatibility with every
 other server mod. The server behavior in the former SelectedDrag Server 1.0.0 was confirmed
 working by the user. Automatic quantities were introduced in 1.0.1 and extended
 to single-row drags in 1.0.3. Destination handling was extended in 1.0.4.
-This 1.0.5 client/server quantity feature still needs in-game confirmation.
+The quantity channel was introduced in 1.0.5. This 1.0.6 client activation fix
+still needs in-game confirmation.
 
 ## Disable or remove
 
