@@ -25,7 +25,7 @@ public final class MultiMoveMod implements WurmServerMod, Configurable, PreInita
     private boolean debug = true;
     private boolean autoQuantities = true;
     private boolean installed;
-    public String getVersion() { return "1.0.5"; }
+    public String getVersion() { return "1.0.6"; }
     public void configure(Properties p) {
         enabled = Boolean.parseBoolean(p.getProperty("enabled", "true"));
         debug = Boolean.parseBoolean(p.getProperty("debug", "true"));
@@ -36,7 +36,7 @@ public final class MultiMoveMod implements WurmServerMod, Configurable, PreInita
         try {
             install(HookManager.getInstance().getClassPool(), debug, autoQuantities);
             installed = true;
-            LOG.info("[MultiMove 1.0.5] native selection hooks installed; autoQuantities=" + autoQuantities);
+            LOG.info("[MultiMove 1.0.6] native selection hooks installed; autoQuantities=" + autoQuantities);
         } catch (Exception | LinkageError e) {
             LOG.log(Level.WARNING, "MultiMove could not install; keeping native transfers.", e);
         }
@@ -46,7 +46,7 @@ public final class MultiMoveMod implements WurmServerMod, Configurable, PreInita
         if (!installed) return;
         try {
             registerQuantityChannel();
-            LOG.info("[MultiMove 1.0.5] optional Shift quantity channel ready");
+            LOG.info("[MultiMove 1.0.6] optional Shift quantity channel ready");
         } catch (Exception | LinkageError e) {
             LOG.log(Level.WARNING, "MultiMove transfers are active, but the optional Shift channel is unavailable.", e);
         }
@@ -102,7 +102,7 @@ public final class MultiMoveMod implements WurmServerMod, Configurable, PreInita
         Patch patch = new Patch();
         try {
             patch.method(comm, "private void multiMove$trace(String text) { if (" + debug
-                    + ") java.util.logging.Logger.getLogger(\"MultiMove\").info(\"[MultiMove 1.0.5] \" + text); }");
+                    + ") java.util.logging.Logger.getLogger(\"MultiMove\").info(\"[MultiMove 1.0.6] \" + text); }");
             patch.field(comm, "private long[] multiMove$ids;");
             patch.field(comm, "private long multiMove$target;");
             patch.field(comm, "private int multiMove$next;");

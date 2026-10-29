@@ -1,12 +1,17 @@
 package mod.wurmunlimited.multimoveshift;
 
 import java.lang.reflect.*;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
 import javassist.*;
 import org.gotti.wurmunlimited.modloader.classhooks.HookManager;
+import org.gotti.wurmunlimited.modcomm.IChannelListener;
+import org.gotti.wurmunlimited.modcomm.ModComm;
+import org.gotti.wurmunlimited.modcomm.ModCommHandler;
 
 public final class TestHarness {
     private static final String INVENTORY = "com.wurmonline.client.renderer.gui.InventoryListComponent";
@@ -50,8 +55,67 @@ public final class TestHarness {
         for (long id : expected) check(b.getLong() == id, "selected source ID and order are retained");
         check(b.getLong() == target && !b.hasRemaining(), "target aliases are preserved and payload has no trailing data");
     }
-    public static void main(String[] args) throws Exception {
+    private static void handshake(String name, int channelId) throws Exception {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        DataOutputStream out = new DataOutputStream(bytes);
+        out.writeByte(2); out.writeByte(1); out.writeInt(channelId > 0 ? 1 : 0);
+        if (channelId > 0) { out.writeInt(channelId); out.writeUTF(name); }
+        out.flush(); ModCommHandler.handlePacket(ByteBuffer.wrap(bytes.toByteArray()));
+    }
+    private static void connectionLifecycle() throws Throwable {
+        final Object[] current = {new Object()};
+        final boolean[] fail = {false};
+        final int[] reads = {0};
+        final MultiMoveShiftMod.ChannelTransport connected = new MultiMoveShiftMod.ChannelTransport(() -> {
+            reads[0]++;
+            if (fail[0]) throw new IllegalStateException("Connection lookup failed");
+            return current[0];
+        });
+        String name = "multimove.test.quantity.v1";
+        connected.channel = ModComm.registerChannel(name, new IChannelListener() {
+            public void onServerConnected() { connected.serverConnected(); }
+        });
+        check(!connected.active() && reads[0] == 0, "startup without server confirmation does not inspect or change the game connection");
+        handshake(name, 0);
+        check(!connected.active() && reads[0] == 0, "a modded server without the MultiMove channel does not enable the companion");
+        handshake(name, 37);
+        check(connected.active(), "actual SDK handshake confirmation enables the current connection");
+        current[0] = new Object();
+        check(connected.channel.isActive() && !connected.active(), "switching servers ignores the SDK's stale active channel flag");
+        handshake(name, 0);
+        check(!connected.active(), "an unsupported server handshake cannot reuse the previous server's confirmation");
+
+        reset(new long[] {258, 514, 770});
+        Method nativeAmount = null;
+        for (Method method : inventoryClass.getDeclaredMethods()) {
+            if (method.getName().startsWith("itemDroppedAmount$")) nativeAmount = method;
+        }
+        if (nativeAmount == null) throw new AssertionError("Wrapped native method missing");
+        nativeAmount.setAccessible(true);
+        MultiMoveShiftMod.quantityHandler(connected).invoke(destination, nativeAmount, new Object[] {row, -1L, 2});
+        check(nativeCalls() == 1 && Arrays.equals((long[])inventoryClass.getField("nativeIds").get(destination), new long[] {258, 514}),
+                "a real stale SDK channel still passes the Shift action to the original game method");
+
+        handshake(name, 72);
+        check(connected.active(), "fresh confirmation enables the companion after reconnecting to a supporting server");
+        current[0] = null;
+        check(!connected.active(), "losing the current connection disables custom quantity handling");
+        current[0] = new Object();
+        check(!connected.active(), "a new connection remains native before its own confirmation");
+        handshake(name, 91);
+        check(connected.active(), "server support can be confirmed again after a lost connection");
+        fail[0] = true;
+        check(!connected.active(), "a failed connection lookup cannot leave the companion enabled");
+        handshake(name, 92);
+        check(!connected.active(), "a confirmation with no identifiable connection stays disabled");
+        fail[0] = false;
+        check(!connected.active(), "recovering connection access does not bypass the fresh-confirmation requirement");
+        handshake(name, 93);
+        check(connected.active(), "a later valid confirmation restores exact-quantity support");
+    }
+    public static void main(String[] args) throws Throwable {
         java.util.logging.Logger.getLogger("MultiMoveShift").setUseParentHandlers(false);
+        java.util.logging.Logger.getLogger("ModComm").setUseParentHandlers(false);
         HookManager manager = HookManager.getInstance();
         ClassPool pool = manager.getClassPool();
         if (args[0].equals("--api")) {
@@ -102,7 +166,45 @@ public final class TestHarness {
             check(transport.sent.isEmpty() && nativeCalls() == 0 && !transport.notices.isEmpty(), "zero and negative values cannot turn into maximum transfers");
         }
         reset(new long[] {258}); transport.active = false; choose(-1L, 2);
-        check(transport.sent.isEmpty() && nativeCalls() == 0 && !transport.notices.isEmpty(), "unsupported server cancels rather than silently transferring maximum");
+        check(nativeCalls() == 1 && transport.sent.isEmpty() && transport.notices.isEmpty(), "unsupported server runs the stock Shift action exactly once without custom packets or messages");
+        check(inventoryClass.getField("nativeTarget").getLong(destination) == -1L
+                && inventoryClass.getField("nativeAmount").getInt(destination) == 2,
+                "native passthrough retains the original destination and entered amount");
+        check(Arrays.equals((long[])inventoryClass.getField("nativeIds").get(destination), new long[] {258}),
+                "unsupported bulk row retains the stock ID request");
+        reset(new long[] {258, 514, 770}, new long[] {1026, 1282, 1538});
+        transport.active = false; choose(9990L, 2);
+        check(nativeCalls() == 1 && Arrays.equals((long[])inventoryClass.getField("nativeIds").get(destination),
+                new long[] {258, 514, 1026, 1282}), "unsupported server keeps native per-stack quantity clipping");
+        for (int amount : new int[] {0, -1}) {
+            reset(new long[] {258, 514}); transport.active = false; choose(-1L, amount);
+            check(nativeCalls() == 1 && transport.notices.isEmpty() && transport.sent.isEmpty()
+                    && inventoryClass.getField("nativeAmount").getInt(destination) == amount,
+                    "unsupported server keeps the stock handling of zero and negative values");
+        }
+        reset(new long[101]); transport.active = false; choose(-1L, Integer.MAX_VALUE);
+        check(nativeCalls() == 1 && transport.notices.isEmpty() && transport.sent.isEmpty(),
+                "unsupported server uses native selection bounds rather than the companion's limit");
+        reset(); transport.active = false; choose(-1L, 2);
+        check(nativeCalls() == 1 && transport.notices.isEmpty() && transport.sent.isEmpty(),
+                "unsupported empty selection goes through the original method");
+        reset(new long[] {258}); transport.active = false;
+        inventoryClass.getField("nativeFail").setBoolean(destination, true);
+        try { choose(-1L, 2); throw new AssertionError("Swallowed native failure"); }
+        catch (InvocationTargetException expected) {
+            Throwable cause = expected.getCause();
+            while (cause.getCause() != null) cause = cause.getCause();
+            check(cause instanceof IllegalStateException && "Native test failure".equals(cause.getMessage()),
+                    "native passthrough preserves the original failure");
+        }
+        check(nativeCalls() == 1 && transport.notices.isEmpty() && transport.attempts == 0,
+                "native failure is not swallowed, retried, or turned into a companion warning");
+        reset(new long[] {258}); transport.active = false; choose(-1L, 2);
+        transport.active = true; choose(-1L, 3);
+        check(nativeCalls() == 1 && transport.sent.size() == 1, "server confirmation enables the companion after native passthrough");
+        transport.active = false; choose(-1L, 4);
+        check(nativeCalls() == 2 && transport.sent.size() == 1 && transport.notices.isEmpty(),
+                "loss of server support restores stock behavior without duplicate requests");
         reset(new long[] {258}); transport.fail = true; choose(-1L, 2);
         check(transport.attempts == 1 && nativeCalls() == 0 && !transport.notices.isEmpty(), "send failure has no retry or native maximum fallback");
         reset(); choose(-1L, 2);
@@ -114,6 +216,7 @@ public final class TestHarness {
         reset(new long[] {258, 514});
         inventoryClass.getMethod("plainDrag").invoke(source);
         check(inventoryClass.getField("nativeCalls").getInt(source) == 1 && transport.sent.isEmpty(), "ordinary drag never uses the Shift channel");
+        connectionLifecycle();
         System.out.println("PASS: " + checks + " client quantity and hook checks");
     }
 }

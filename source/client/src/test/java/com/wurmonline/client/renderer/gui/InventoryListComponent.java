@@ -7,6 +7,9 @@ public class InventoryListComponent {
     public long[][] groups = new long[0][];
     public int nativeCalls;
     public long[] nativeIds;
+    public long nativeTarget;
+    public int nativeAmount;
+    public boolean nativeFail;
     public long[] getSelectedCommandTargets(int amount) {
         List<Long> ids = new ArrayList<>();
         for (long[] group : groups) {
@@ -20,7 +23,9 @@ public class InventoryListComponent {
     public void plainDrag() { nativeCalls++; nativeIds = getSelectedCommandTargets(0); }
     public void chooseAmount(InventoryTreeListItem row, long destination, int amount) { itemDroppedAmount(row, destination, amount); }
     void itemDroppedAmount(InventoryTreeListItem row, long destination, int amount) {
-        nativeCalls++; nativeIds = row.getOwner().getSelectedCommandTargets(amount);
+        nativeCalls++; nativeTarget = destination; nativeAmount = amount;
+        nativeIds = row.getOwner().getSelectedCommandTargets(amount);
+        if (nativeFail) throw new IllegalStateException("Native test failure");
     }
     public static abstract class InventoryTreeListItem {
         private final InventoryListComponent owner;
